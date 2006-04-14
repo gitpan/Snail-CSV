@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 sub new
 {
@@ -15,7 +15,7 @@ sub new
 	$this->{'OPTS'} = shift || {};
 	unless ( %{$this->{'OPTS'}} )
 	{
-		$this->{'OPTS'} = { 'eol' => "\015\012", 'sep_char' => ';', 'quote_char'  => '"', 'escape_char' => '"', 'binary' => 1 }
+		$this->{'OPTS'} = { 'eol' => "\015\012", 'sep_char' => ';', 'quote_char'  => '"', 'escape_char' => '"', 'binary' => 1 };
 	}
 	return $this;
 }
@@ -50,6 +50,7 @@ sub parse
 		my $fh = new IO::File;
 		if ($fh->open("< $this->{'FILE'}"))
 		{
+			my $NUMB = 1;
 			while (my $columns = $this->{'CSVXS'}->getline($fh))
 			{
 				last unless @{$columns};
@@ -65,12 +66,13 @@ sub parse
 					{
 						$filter_flag = $this->{'FILTER'}->{$colname}->($tmpout->{$colname});
 					}
-					if (exists($this->{'FILTER'}->{$colname}) && ref $this->{'FILTER'}->{$colname} eq 'SCALAR')
+					if (exists($this->{'FILTER'}->{$colname}) && !ref($this->{'FILTER'}->{$colname}))
 					{
 						$filter_flag = $this->{'FILTER'}->{$colname} eq $tmpout->{$colname} ? 1 : 0;
 					}
 				}
-				if ($filter_flag) { push @{$this->{'DATA'}}, $tmpout; }
+				if ($filter_flag) { $tmpout->{'NUMBER'} = $NUMB; push @{$this->{'DATA'}}, $tmpout; }
+				$NUMB++;
 			}
 			$fh->close;
 		}
@@ -82,6 +84,12 @@ sub getData
 {
 	my $this = shift;
 	return exists($this->{'DATA'}) ? $this->{'DATA'} : [];
+}
+
+sub update
+{
+	my $this = shift;
+	return $this;
 }
 
 sub _init_csv
@@ -237,6 +245,13 @@ C<dump> is:
             'pq'   => '5'
           }
         ];
+
+=head1 TODO
+
+
+Update data.
+
+
 
 =head1 SEE ALSO
 
