@@ -1,6 +1,11 @@
 Revision history for Perl extension Snail::CSV.
 
 
+0.04  2006-04-18
+
+        * DOCS: update documentation.
+
+
 0.03  2006-04-18
 
         * NEW: add method setData.

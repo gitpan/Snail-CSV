@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 sub new
 {
@@ -192,40 +192,45 @@ Snail::CSV - Perl extension for read CSV files.
 
 =head1 SYNOPSIS
 
-	use Snail::CSV;
-	my $csv = Snail::CSV->new(\%args); # %args - Text::CSV_XS options
+  use Snail::CSV;
+  my $csv = Snail::CSV->new(\%args); # %args - Text::CSV_XS options
 
 
-	$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+  my %filter = (
+                 'pq'   => 3,
+                 'name' => sub { my $name = shift; $name =~ /XP$/ ? 1 : 0; }
+               );
+
+  $csv->setFile("lamps.csv", [ "id", "name", "pq" ], \%filter);
 
 
-		my $lamps = $csv->parse;
+    my $lamps = $csv->parse;
 
-		# or
+    # or
 
-		$csv->parse;
-		# some code
-		my $lamps = $csv->getData;
-
-
-	$csv->setFile("tents.csv", [ "id", "name", "brand", "price" ]);
+    $csv->parse;
+    # some code
+    my $lamps = $csv->getData;
 
 
-		my $tents = $csv->fetchall_hashref; # $tents is HASHREF
-		for my $item (keys %{$tents})
-		{
-			$tents->{$item}->{'price'} = $tents->{$item}->{'brand'} eq 'Marmot' ? 0.95 * $tents->{$item}->{'price'} : $tents->{$item}->{'price'};
-		}
-		$csv->setData($tents);
-		$csv->update; # to tents.csv
+  $csv->setFile("tents.csv", [ "id", "name", "brand", "price" ]);
 
-		# or
 
-		for my $item ( @{ $csv->fetchall_arrayref } )
-		{
-			$item->{'price'} = $item->{'brand'} eq 'Marmot' ? 0.95 * $item->{'price'} : $item->{'price'};
-		}
-		$csv->update("/full/path/to/new_file.csv"); # to new CSV file
+    my $tents = $csv->fetchall_hashref; # $tents is HASHREF
+    for my $item (values %{$tents})
+    {
+      $item->{'price'} = $item->{'brand'} eq 'Marmot' ? 0.95 * $item->{'price'} : $item->{'price'};
+    }
+    $csv->setData($tents);
+    $csv->update; # to tents.csv
+
+    # or
+
+    for my $item ( @{ $csv->fetchall_arrayref } )
+    {
+      $item->{'price'} = $item->{'brand'} eq 'Marmot' ? 0.95 * $item->{'price'} : $item->{'price'};
+    }
+    $csv->update("/full/path/to/new_file.csv"); # to new CSV file
 
 
 =head1 DESCRIPTION
@@ -250,11 +255,11 @@ Set CSV file, fields name and filters for fields name. Return object.
 
 Fields and Filters:
 
-	my @fields_name = ("id", "name", "pq");
-	my %filter = (
-					'pq'   => 3,
-					'name' => sub { my $name = shift; $name =~ /XP$/ ? 1 : 0; }
-				);
+  my @fields_name = ("id", "name", "pq");
+  my %filter = (
+                 'pq'   => 3,
+                 'name' => sub { my $name = shift; $name =~ /XP$/ ? 1 : 0; }
+               );
 
 =item B<parse>
 
@@ -282,7 +287,7 @@ Set new data. Return object.
 
 =item B<update('/full/path/to/new_file.csv')>
 
-Attention! If complete way to the new file is not assigned, the current file will be rewritten. Return object.
+Attention! If new file not defined, update current file. Return object.
 
 =item B<version>
 
@@ -302,68 +307,68 @@ None by default.
 
 Code:
 
-	#!/usr/bin/perl -w
-	use strict;
+  #!/usr/bin/perl -w
+  use strict;
 
-	use Snail::CSV;
-	use Data::Dumper;
+  use Snail::CSV;
+  use Data::Dumper;
 
-	my $csv = Snail::CSV->new();
+  my $csv = Snail::CSV->new();
 
-		$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
-		# or
-		$csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
+    $csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+    # or
+    $csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
 
-	my $lamps = $csv->parse;
+  my $lamps = $csv->parse;
 
-	print Dumper($lamps);
+  print Dumper($lamps);
 
 lamps.csv
 
-	1;"Tikka Plus";3
-	2;"Myo XP";1
-	3;"Duobelt Led 8";5
+  1;"Tikka Plus";3
+  2;"Myo XP";1
+  3;"Duobelt Led 8";5
 
 If you wrote:
 
-	$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+  $csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
 
 then C<dump> is:
 
-	$VAR1 = [
-				{
-					'id'   => '1',
-					'name' => 'Tikka Plus',
-					'pq'   => '3'
-				},
-				{
-					'id'   => '2',
-					'name' => 'Myo XP',
-					'pq'   => '1'
-				},
-				{
-					'id'   => '3',
-					'name' => 'Duobelt Led 8',
-					'pq'   => '5'
-				}
-			];
+  $VAR1 = [
+            {
+              'id'   => '1',
+              'name' => 'Tikka Plus',
+              'pq'   => '3'
+            },
+            {
+              'id'   => '2',
+              'name' => 'Myo XP',
+              'pq'   => '1'
+            },
+            {
+              'id'   => '3',
+              'name' => 'Duobelt Led 8',
+              'pq'   => '5'
+            }
+          ];
 
 but if:
 
-	$csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
+  $csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
 
 C<dump> is:
 
-	$VAR1 = [
-				{
-					'id'   => '1',
-					'pq'   => '3'
-				},
-				{
-					'id'   => '3',
-					'pq'   => '5'
-				}
-			];
+  $VAR1 = [
+            {
+              'id'   => '1',
+              'pq'   => '3'
+            },
+            {
+              'id'   => '3',
+              'pq'   => '5'
+            }
+          ];
 
 =head2 Other example.
 
