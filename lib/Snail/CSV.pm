@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 sub new
 {
@@ -27,51 +27,61 @@ sub setFile
 	$this->{'FIELDS'} = shift || [];
 	$this->{'FILTER'} = shift || {};
 
-	$this->{'DATA'} = [];
-
 	$this->{'FILE'} or die "Please provide a filename to parse\n";
 	-f $this->{'FILE'} or die "Cannot find filename: ". $this->{'FILE'}. "\n";
 
 	return $this;
 }
 
+sub fetchall_arrayref
+{
+	return shift->parse([]);
+}
+
+sub fetchall_hashref
+{
+	return shift->parse({});
+}
+
 sub parse
 {
 	my $this = shift;
-	if (exists($this->{'DATA'}) && @{$this->{'DATA'}}) { return $this->{'DATA'}; }
+	if (exists($this->{'DATA'})) { return $this->{'DATA'}; }
 	exists($this->{'FILE'}) or die "Please provide a filename to parse\n";
 	exists($this->{'CSVXS'}) or $this->_init_csv;
 
-	$this->{'DATA'} = [];
+	$this->{'DATA'} = shift || [];
+	my $dtype = ref $this->{'DATA'};
 
 	{
 		local $/ = $this->{'OPTS'}->{'eol'} || "\015\012";
 
-		my $fh = new IO::File;
-		if ($fh->open("< $this->{'FILE'}"))
+		my $fh = new IO::File "$this->{'FILE'}", "r";
+		if (defined $fh)
 		{
 			my $NUMB = 1;
 			while (my $columns = $this->{'CSVXS'}->getline($fh))
 			{
 				last unless @{$columns};
-				my $tmpout = {};
-				my $filter_flag = 1;
+				my $tmp = {};
+				my $f_flag = 1;
 				for (my $j = 0; $j < @{$columns}; $j++)
 				{
 					my $colname = $this->{'FIELDS'}->[$j] ? $this->{'FIELDS'}->[$j] : "";
 					next unless $colname;
 
-					$tmpout->{$colname} = $columns->[$j];
+					$tmp->{$colname} = $columns->[$j];
 					if (exists($this->{'FILTER'}->{$colname}) && ref $this->{'FILTER'}->{$colname} eq 'CODE')
 					{
-						$filter_flag = $this->{'FILTER'}->{$colname}->($tmpout->{$colname});
+						$f_flag = $this->{'FILTER'}->{$colname}->($tmp->{$colname});
 					}
 					if (exists($this->{'FILTER'}->{$colname}) && !ref($this->{'FILTER'}->{$colname}))
 					{
-						$filter_flag = $this->{'FILTER'}->{$colname} eq $tmpout->{$colname} ? 1 : 0;
+						$f_flag = $this->{'FILTER'}->{$colname} eq $tmp->{$colname} ? 1 : 0;
 					}
 				}
-				if ($filter_flag) { $tmpout->{'NUMBER'} = $NUMB; push @{$this->{'DATA'}}, $tmpout; }
+				if ($f_flag && $dtype eq 'ARRAY') { $tmp->{'NUMBER'} = $NUMB; push @{$this->{'DATA'}}, $tmp; }
+				if ($f_flag && $dtype eq 'HASH') { $this->{'DATA'}->{$NUMB} = $tmp; }
 				$NUMB++;
 			}
 			$fh->close;
@@ -86,9 +96,82 @@ sub getData
 	return exists($this->{'DATA'}) ? $this->{'DATA'} : [];
 }
 
+sub setData
+{
+	my $this = shift;
+	$this->{'DATA'} = shift || [];
+	return $this;
+}
+
 sub update
 {
 	my $this = shift;
+	my $nfile = shift || $this->{'FILE'};
+	my $tfile = $nfile . "." . time; # temp file for inplace update - it is bad method for create filename
+
+	if (ref $this->{'DATA'} eq 'ARRAY') { $this->_to_hashref; }
+	if (ref $this->{'DATA'} ne 'HASH') { return $this; }
+	unless (%{$this->{'DATA'}}) { return $this; }
+
+	{
+		local $/ = $this->{'OPTS'}->{'eol'} || "\015\012";
+
+		my $tfh = new IO::File "$tfile", "w";
+		if (defined $tfh)
+		{
+			my $fh = new IO::File "$this->{'FILE'}", "r";
+			if (defined $fh)
+			{
+				my $NUMB = 1;
+				while (my $columns = $this->{'CSVXS'}->getline($fh))
+				{
+					last unless @{$columns};
+					unless (exists($this->{'DATA'}->{$NUMB}))
+					{
+						$this->{'CSVXS'}->combine( @{$columns} );
+						print $tfh $this->{'CSVXS'}->string;
+						$NUMB++; next;
+					}
+
+					for (my $j = 0; $j < @{$columns}; $j++)
+					{
+						my $colname = $this->{'FIELDS'}->[$j] ? $this->{'FIELDS'}->[$j] : "COLUMNS" . $NUMB;
+						if (exists($this->{'DATA'}->{$NUMB}->{$colname}) && $this->{'DATA'}->{$NUMB}->{$colname} ne $columns->[$j])
+						{
+							$columns->[$j] = $this->{'DATA'}->{$NUMB}->{$colname};
+						}
+					}
+
+					$this->{'CSVXS'}->combine( @{$columns} );
+					print $tfh $this->{'CSVXS'}->string;
+
+					$NUMB++;
+				}
+				$fh->close;
+			}
+			$tfh->close;
+		}
+	}
+	rename $tfile, $nfile;
+	unlink $tfile;
+	return $this;
+}
+
+sub _to_hashref
+{
+	my $this = shift;
+	my $hash = {};
+	while (defined(my $item = shift @{$this->{'DATA'}}))
+	{
+		next unless exists($item->{'NUMBER'});
+		unless (exists($hash->{$item->{'NUMBER'}}))
+		{
+			$hash->{$item->{'NUMBER'}} = $item;
+			delete $hash->{$item->{'NUMBER'}}->{'NUMBER'};
+		}
+	}
+	$this->{'DATA'} = {};
+	$this->{'DATA'} = $hash;
 	return $this;
 }
 
@@ -109,26 +192,40 @@ Snail::CSV - Perl extension for read CSV files.
 
 =head1 SYNOPSIS
 
-  use Snail::CSV;
-  my $csv = Snail::CSV->new(\%args);	# %args - Text::CSV_XS options
+	use Snail::CSV;
+	my $csv = Snail::CSV->new(\%args); # %args - Text::CSV_XS options
 
 
-  $csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+	$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
 
 
-  my $lamps = $csv->parse;
+		my $lamps = $csv->parse;
 
-  # or
+		# or
 
-  $csv->parse;
-  # some code
-  my $lamps = $csv->getData;
-
-
-  $csv->setFile("tents.csv", [ "id", "name", "brand", "price" ]);
+		$csv->parse;
+		# some code
+		my $lamps = $csv->getData;
 
 
-  my $tents = $csv->parse;
+	$csv->setFile("tents.csv", [ "id", "name", "brand", "price" ]);
+
+
+		my $tents = $csv->fetchall_hashref; # $tents is HASHREF
+		for my $item (keys %{$tents})
+		{
+			$tents->{$item}->{'price'} = $tents->{$item}->{'brand'} eq 'Marmot' ? 0.95 * $tents->{$item}->{'price'} : $tents->{$item}->{'price'};
+		}
+		$csv->setData($tents);
+		$csv->update; # to tents.csv
+
+		# or
+
+		for my $item ( @{ $csv->fetchall_arrayref } )
+		{
+			$item->{'price'} = $item->{'brand'} eq 'Marmot' ? 0.95 * $item->{'price'} : $item->{'price'};
+		}
+		$csv->update("/full/path/to/new_file.csv"); # to new CSV file
 
 
 =head1 DESCRIPTION
@@ -147,25 +244,45 @@ This is constructor. %args - L<Text::CSV_XS> options. Return object.
 
 =item B<setFile('file.csv', \@fields_name)>
 
-=item B<setFile('file.csv', \@fields_name, \%filters)>
+=item B<setFile('file.csv', \@fields_name, \%filter)>
 
 Set CSV file, fields name and filters for fields name. Return object.
 
 Fields and Filters:
 
-  my @fields_name = ("id", "name", "pq");
-  my %filters = (
-                 'pq'   => 3,
-                 'name' => sub { my $name = shift; $name =~ /XP$/ ? 1 : 0; }
-                );
+	my @fields_name = ("id", "name", "pq");
+	my %filter = (
+					'pq'   => 3,
+					'name' => sub { my $name = shift; $name =~ /XP$/ ? 1 : 0; }
+				);
 
 =item B<parse>
 
 Read and parse CSV file. Return arrayref.
 
+=item B<fetchall_arrayref>
+
+An alternative to B<parse>. Return arrayref.
+
+=item B<fetchall_hashref>
+
+An alternative to B<parse>. Return hashref.
+
 =item B<getData>
 
-Return arrayref. Use this method after B<parse>.
+Return current data. Use this method after B<parse> (B<fetchall_arrayref>, B<fetchall_hashref>).
+
+=item B<setData(\@data)>
+
+=item B<setData(\%data)>
+
+Set new data. Return object.
+
+=item B<update>
+
+=item B<update('/full/path/to/new_file.csv')>
+
+Attention! If complete way to the new file is not assigned, the current file will be rewritten. Return object.
 
 =item B<version>
 
@@ -181,76 +298,81 @@ None by default.
 
 =head1 EXAMPLE
 
+=head2 First example.
+
 Code:
 
-  #!/usr/bin/perl -w
-  use strict;
+	#!/usr/bin/perl -w
+	use strict;
 
-  use Snail::CSV;
-  use Data::Dumper;
+	use Snail::CSV;
+	use Data::Dumper;
 
-  my $csv = Snail::CSV->new();
+	my $csv = Snail::CSV->new();
 
-  $csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
-  # or
-  $csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
+		$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+		# or
+		$csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
 
-  my $lamps = $csv->parse;
+	my $lamps = $csv->parse;
 
-  print Dumper($lamps);
+	print Dumper($lamps);
 
 lamps.csv
 
-  1;"Tikka Plus";3
-  2;"Myo XP";1
-  3;"Duobelt Led 8";5
+	1;"Tikka Plus";3
+	2;"Myo XP";1
+	3;"Duobelt Led 8";5
 
 If you wrote:
 
-  $csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
+	$csv->setFile("lamps.csv", [ "id", "name", "pq" ]);
 
 then C<dump> is:
 
-  $VAR1 = [
-          {
-            'id'   => '1',
-            'name' => 'Tikka Plus',
-            'pq'   => '3'
-          },
-          {
-            'id'   => '2',
-            'name' => 'Myo XP',
-            'pq'   => '1'
-          },
-          {
-            'id'   => '3',
-            'name' => 'Duobelt Led 8',
-            'pq'   => '5'
-          }
-        ];
+	$VAR1 = [
+				{
+					'id'   => '1',
+					'name' => 'Tikka Plus',
+					'pq'   => '3'
+				},
+				{
+					'id'   => '2',
+					'name' => 'Myo XP',
+					'pq'   => '1'
+				},
+				{
+					'id'   => '3',
+					'name' => 'Duobelt Led 8',
+					'pq'   => '5'
+				}
+			];
 
-But if:
+but if:
 
-  $csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
+	$csv->setFile("lamps.csv", [ "id", "", "pq" ], { 'pq' => sub { my $pq = shift; $pq > 2 ? 1 : 0; } });
 
 C<dump> is:
 
-  $VAR1 = [
-          {
-            'id'   => '1',
-            'pq'   => '3'
-          },
-          {
-            'id'   => '3',
-            'pq'   => '5'
-          }
-        ];
+	$VAR1 = [
+				{
+					'id'   => '1',
+					'pq'   => '3'
+				},
+				{
+					'id'   => '3',
+					'pq'   => '5'
+				}
+			];
+
+=head2 Other example.
+
+	Done.
+
 
 =head1 TODO
 
-
-Update data.
-
+Save current data.
 
 
 =head1 SEE ALSO

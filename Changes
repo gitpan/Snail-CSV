@@ -1,6 +1,12 @@
 Revision history for Perl extension Snail::CSV.
 
 
+0.03  2006-04-18
+
+        * NEW: add method setData.
+        * NEW: add method update.
+
+
 0.02  2006-04-14
 
         * FIX: plain filter is not a SCALAR reference.
@@ -9,4 +15,4 @@ Revision history for Perl extension Snail::CSV.
 
 0.01  2006-04-12
 
-        * original version
+        * original version.
