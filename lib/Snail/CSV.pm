@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 sub new
 {
@@ -46,7 +46,6 @@ sub fetchall_hashref
 sub parse
 {
 	my $this = shift;
-	if (exists($this->{'DATA'})) { return $this->{'DATA'}; }
 	exists($this->{'FILE'}) or die "Please provide a filename to parse\n";
 	exists($this->{'CSVXS'}) or $this->_init_csv;
 
