@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 sub new
 {
@@ -156,6 +156,45 @@ sub update
 	return $this;
 }
 
+sub save
+{
+	my $this = shift;
+	my $nfile = shift || $this->{'FILE'};
+	my $tfile = $nfile . "." . time; # temp file for inplace update - it is bad method for create filename
+
+	if (ref $this->{'DATA'} eq 'ARRAY') { $this->_to_hashref; }
+	if (ref $this->{'DATA'} ne 'HASH') { return $this; }
+	unless (%{$this->{'DATA'}}) { return $this; }
+
+	{
+		local $/ = $this->{'OPTS'}->{'eol'} || "\015\012";
+
+		my $tfh = new IO::File "$tfile", "w";
+		if (defined $tfh)
+		{
+
+			$this->{'CSVXS'}->combine( @{$this->{'FIELDS'}} );
+			print $tfh $this->{'CSVXS'}->string;
+
+			foreach my $nitem (keys %{$this->{'DATA'}})
+			{
+				my $columns = [];
+				for (@{$this->{'FIELDS'}})
+				{
+					push @{$columns}, exists($this->{'DATA'}->{$nitem}->{$_}) ? $this->{'DATA'}->{$nitem}->{$_} : "";
+				}
+				$this->{'CSVXS'}->combine( @{$columns} );
+				print $tfh $this->{'CSVXS'}->string;
+			}
+			$tfh->close;
+		}
+	}
+	rename $tfile, $nfile;
+	unlink $tfile;
+	return $this;
+}
+
+
 sub _to_hashref
 {
 	my $this = shift;
@@ -288,6 +327,12 @@ Set new data. Return object.
 
 Attention! If new file not defined, update current file. Return object.
 
+=item B<save>
+
+=item B<save('/full/path/to/new_file.csv')>
+
+Save current object data. Attention! If new file not defined, save data to current file. Return object.
+
 =item B<version>
 
 Return version number.
@@ -376,7 +421,7 @@ C<dump> is:
 
 =head1 TODO
 
-Save current data.
+Goog idea? Welcome...
 
 
 =head1 SEE ALSO
