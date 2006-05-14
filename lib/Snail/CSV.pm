@@ -5,7 +5,7 @@ use Text::CSV_XS;
 use IO::File;
 
 use vars qw($VERSION);
-$VERSION = '0.06';
+$VERSION = '0.07';
 
 sub new
 {
@@ -226,7 +226,7 @@ sub version { return $VERSION; }
 
 =head1 NAME
 
-Snail::CSV - Perl extension for read CSV files.
+Snail::CSV - Perl extension for read/write/update CSV files.
 
 =head1 SYNOPSIS
 
@@ -273,7 +273,7 @@ Snail::CSV - Perl extension for read CSV files.
 
 =head1 DESCRIPTION
 
-This module can be used to read data from CSV files. L<Text::CSV_XS> is used for parsing CSV files.
+This module can be used to read/write/update data from/to CSV files. L<Text::CSV_XS> is used for parsing CSV files.
 
 =head1 METHOD
 
